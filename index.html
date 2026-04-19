@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Айтрекер для рекламного проекта</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="https://webgazer.cs.brown.edu/webgazer.js" defer></script>
+    <script src="script.js" defer></script>
+  </head>
+  <body>
+    <main class="container">
+      <h1>Айтрекер для рекламного проекта</h1>
+      <p class="subtitle">
+        Разрешите доступ к камере, затем посмотрите на разные зоны баннера. Точка
+        покажет предполагаемое направление взгляда.
+      </p>
+
+      <section class="controls" aria-label="Управление">
+        <button id="startBtn" type="button">Запустить трекинг</button>
+        <button id="stopBtn" type="button" disabled>Остановить</button>
+        <button id="clearBtn" type="button" disabled>Очистить теплокарту</button>
+      </section>
+
+      <section class="status" aria-live="polite">
+        <strong>Статус:</strong>
+        <span id="statusText">Ожидание запуска</span>
+      </section>
+
+      <section class="ad-layout" aria-label="Макет рекламы">
+        <div class="ad-card">
+          <h2>Новый продукт</h2>
+          <p>
+            Это пример рекламного блока. Используйте теплокарту, чтобы увидеть,
+            куда пользователи смотрят чаще всего.
+          </p>
+          <a class="cta" href="#">Купить сейчас</a>
+        </div>
+      </section>
+
+      <section class="metrics" aria-label="Метрики">
+        <h3>Базовая аналитика</h3>
+        <ul>
+          <li>Сэмплы взгляда: <span id="sampleCount">0</span></li>
+          <li>Средняя X: <span id="avgX">0</span></li>
+          <li>Средняя Y: <span id="avgY">0</span></li>
+        </ul>
+      </section>
+    </main>
+
+    <canvas id="heatmapCanvas"></canvas>
+    <div id="gazeDot" aria-hidden="true"></div>
+  </body>
+</html>
