@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Рабочий айтрекер (1 файл)</title>
+    <style>
+      :root {
+        --bg: #f6f8fc;
+        --text: #1f2a44;
+        --primary: #2f67ff;
+        --danger: #d42b52;
+      }
+
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+        color: var(--text);
+        background: var(--bg);
+      }
+
+      .container {
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 24px;
+      }
+
+      .controls {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin-bottom: 12px;
+      }
+
+      button {
+        border: 0;
+        border-radius: 10px;
+        padding: 10px 14px;
+        font-size: 15px;
+        cursor: pointer;
+        background: var(--primary);
+        color: #fff;
+      }
+
+      #stopBtn { background: var(--danger); }
+
+      button:disabled {
+        cursor: not-allowed;
+        opacity: 0.6;
+      }
+
+      .status, .metrics {
+        background: #fff;
+        border-radius: 14px;
+        padding: 14px;
+        margin-bottom: 18px;
+      }
+
+      #heatmapCanvas {
+        position: fixed;
+        inset: 0;
+        width: 100vw;
+        height: 100vh;
+        pointer-events: none;
+        z-index: 10;
+      }
+
+      #gazeDot {
+        position: fixed;
+        width: 18px;
+        height: 18px;
+        margin-left: -9px;
+        margin-top: -9px;
+        border-radius: 50%;
+        border: 2px solid #fff;
+        background: rgba(255, 90, 122, 0.9);
+        box-shadow: 0 0 0 2px rgba(255, 90, 122, 0.35);
+        pointer-events: none;
+        z-index: 11;
+        display: none;
+      }
+
+      .tip {
+        font-size: 14px;
+        opacity: 0.8;
+      }
+    </style>
+    <script src="https://webgazer.cs.brown.edu/webgazer.js" defer></script>
+  </head>
+  <body>
+    <main class="container">
+      <h1>Простой айтрекер для проекта по рекламе</h1>
+      <p>
+        Нажмите кнопку запуска: сайт автоматически запросит доступ к камере.
+      </p>
+
+      <section class="controls" aria-label="Управление">
+        <button id="startBtn" type="button">Запустить трекер</button>
+        <button id="stopBtn" type="button" disabled>Остановить</button>
+        <button id="clearBtn" type="button" disabled>Очистить теплокарту</button>
+      </section>
+
+      <section class="status" aria-live="polite">
+        <strong>Статус:</strong>
+        <span id="statusText">Готово к запуску</span>
+      </section>
+
+      <section class="metrics" aria-label="Метрики">
+        <h3>Базовая аналитика</h3>
+        <ul>
+          <li>Сэмплы взгляда: <span id="sampleCount">0</span></li>
+          <li>Средняя X: <span id="avgX">0</span></li>
+          <li>Средняя Y: <span id="avgY">0</span></li>
+        </ul>
+      </section>
+
+      <p class="tip">
+        Важно: для камеры лучше запускать через <code>http://localhost</code> (например,
+        <code>python3 -m http.server 8080</code>), а не двойным кликом по файлу.
+      </p>
+    </main>
+
+    <canvas id="heatmapCanvas"></canvas>
+    <div id="gazeDot" aria-hidden="true"></div>
+
+    <script>
+      const startBtn = document.getElementById('startBtn');
+      const stopBtn = document.getElementById('stopBtn');
+      const clearBtn = document.getElementById('clearBtn');
+      const statusText = document.getElementById('statusText');
+      const sampleCountEl = document.getElementById('sampleCount');
+      const avgXEl = document.getElementById('avgX');
+      const avgYEl = document.getElementById('avgY');
+      const heatmapCanvas = document.getElementById('heatmapCanvas');
+      const gazeDot = document.getElementById('gazeDot');
+      const ctx = heatmapCanvas.getContext('2d');
+
+      let isTracking = false;
+      let sampleCount = 0;
+      let sumX = 0;
+      let sumY = 0;
+
+      function setStatus(text) {
+        statusText.textContent = text;
+      }
+
+      function resizeCanvas() {
+        heatmapCanvas.width = window.innerWidth;
+        heatmapCanvas.height = window.innerHeight;
+      }
+
+      function drawHeatPoint(x, y) {
+        const gradient = ctx.createRadialGradient(x, y, 4, x, y, 40);
+        gradient.addColorStop(0, 'rgba(255, 90, 122, 0.35)');
+        gradient.addColorStop(1, 'rgba(255, 90, 122, 0)');
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.arc(x, y, 40, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      function updateMetrics(x, y) {
+        sampleCount += 1;
+        sumX += x;
+        sumY += y;
+        sampleCountEl.textContent = String(sampleCount);
+        avgXEl.textContent = (sumX / sampleCount).toFixed(0);
+        avgYEl.textContent = (sumY / sampleCount).toFixed(0);
+      }
+
+      function resetMetrics() {
+        sampleCount = 0;
+        sumX = 0;
+        sumY = 0;
+        sampleCountEl.textContent = '0';
+        avgXEl.textContent = '0';
+        avgYEl.textContent = '0';
+      }
+
+      async function requestCameraPermission() {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          throw new Error('Браузер не поддерживает доступ к камере');
+        }
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        stream.getTracks().forEach((track) => track.stop());
+      }
+
+      async function waitForWebGazer(timeoutMs = 5000) {
+        const startedAt = Date.now();
+        while (!window.webgazer) {
+          if (Date.now() - startedAt > timeoutMs) {
+            throw new Error('WebGazer не загрузился');
+          }
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+      }
+
+      async function startTracking() {
+        startBtn.disabled = true;
+        setStatus('Запрашиваем доступ к камере...');
+
+        try {
+          await requestCameraPermission();
+          await waitForWebGazer();
+
+          await window.webgazer
+            .setRegression('ridge')
+            .setGazeListener((data) => {
+              if (!isTracking || !data) return;
+
+              const x = Math.max(0, Math.min(window.innerWidth, data.x));
+              const y = Math.max(0, Math.min(window.innerHeight, data.y));
+
+              gazeDot.style.display = 'block';
+              gazeDot.style.left = `${x}px`;
+              gazeDot.style.top = `${y}px`;
+
+              drawHeatPoint(x, y);
+              updateMetrics(x, y);
+            })
+            .begin();
+
+          window.webgazer.showVideoPreview(true).showPredictionPoints(false);
+
+          isTracking = true;
+          setStatus('Трекинг запущен.');
+          stopBtn.disabled = false;
+          clearBtn.disabled = false;
+        } catch (error) {
+          setStatus(`Не удалось запустить: ${error.message}`);
+          startBtn.disabled = false;
+        }
+      }
+
+      function stopTracking() {
+        if (window.webgazer) {
+          window.webgazer.pause();
+        }
+        isTracking = false;
+        gazeDot.style.display = 'none';
+        setStatus('Трекинг остановлен.');
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
+      }
+
+      function clearHeatmap() {
+        ctx.clearRect(0, 0, heatmapCanvas.width, heatmapCanvas.height);
+        resetMetrics();
+        setStatus('Теплокарта очищена.');
+      }
+
+      startBtn.addEventListener('click', startTracking);
+      stopBtn.addEventListener('click', stopTracking);
+      clearBtn.addEventListener('click', clearHeatmap);
+      window.addEventListener('resize', resizeCanvas);
+      window.addEventListener('beforeunload', () => {
+        if (window.webgazer) {
+          window.webgazer.end();
+        }
+      });
+
+      resizeCanvas();
+    </script>
+  </body>
+</html>
